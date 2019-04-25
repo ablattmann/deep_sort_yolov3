@@ -20,6 +20,10 @@ from tools import generate_detections as gdet
 from deep_sort.detection import Detection as ddet
 warnings.filterwarnings('ignore')
 
+MP4_PATH = '../../data/dataset/test_data/hanoi.mp4'
+USE_MP4 = 1
+TRACKED_CLASSES = {'car', 'motorbike', 'truck', 'Bus'}
+
 def main(yolo):
 
    # Definition of the parameters
@@ -34,9 +38,13 @@ def main(yolo):
     metric = nn_matching.NearestNeighborDistanceMetric("cosine", max_cosine_distance, nn_budget)
     tracker = Tracker(metric)
 
-    writeVideo_flag = True 
-    
-    video_capture = cv2.VideoCapture(0)
+    writeVideo_flag = False
+
+
+    if USE_MP4:
+        video_capture = cv2.VideoCapture(MP4_PATH)
+    else:
+        video_capture = cv2.VideoCapture(0)
 
     if writeVideo_flag:
     # Define the codec and create VideoWriter object
@@ -45,34 +53,36 @@ def main(yolo):
         fourcc = cv2.VideoWriter_fourcc(*'MJPG')
         out = cv2.VideoWriter('output.avi', fourcc, 15, (w, h))
         list_file = open('detection.txt', 'w')
-        frame_index = -1 
-        
+        frame_index = -1
+
     fps = 0.0
     while True:
         ret, frame = video_capture.read()  # frame shape 640*480*3
+        # frame shape 640*480*3
         if ret != True:
             break
         t1 = time.time()
 
        # image = Image.fromarray(frame)
         image = Image.fromarray(frame[...,::-1]) #bgr to rgb
-        boxs = yolo.detect_image(image)
+        detected_objects = yolo.detect_image(image)
        # print("box_num",len(boxs))
+        boxs = [s['Box'] for s in detected_objects]
         features = encoder(frame,boxs)
-        
+
         # score to 1.0 here).
         detections = [Detection(bbox, 1.0, feature) for bbox, feature in zip(boxs, features)]
-        
+
         # Run non-maxima suppression.
         boxes = np.array([d.tlwh for d in detections])
         scores = np.array([d.confidence for d in detections])
         indices = preprocessing.non_max_suppression(boxes, nms_max_overlap, scores)
         detections = [detections[i] for i in indices]
-        
+
         # Call the tracker
         tracker.predict()
         tracker.update(detections)
-        
+
         for track in tracker.tracks:
             if not track.is_confirmed() or track.time_since_update > 1:
                 continue 
@@ -110,4 +120,5 @@ def main(yolo):
     cv2.destroyAllWindows()
 
 if __name__ == '__main__':
-    main(YOLO())
+    yolo = YOLO(TRACKED_CLASSES)
+    main(yolo)

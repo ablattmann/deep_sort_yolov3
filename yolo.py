@@ -19,7 +19,8 @@ from yolo3.model import yolo_eval
 from yolo3.utils import letterbox_image
 
 class YOLO(object):
-    def __init__(self):
+    def __init__(self,
+                 tracked_classes={'car'}):
         self.model_path = 'model_data/yolo.h5'
         self.anchors_path = 'model_data/yolo_anchors.txt'
         self.classes_path = 'model_data/coco_classes.txt'
@@ -31,6 +32,7 @@ class YOLO(object):
         self.model_image_size = (416, 416) # fixed size or (None, None)
         self.is_fixed_size = self.model_image_size != (None, None)
         self.boxes, self.scores, self.classes = self.generate()
+        self.tracked_classes = tracked_classes
 
     def _get_class(self):
         classes_path = os.path.expanduser(self.classes_path)
@@ -86,7 +88,7 @@ class YOLO(object):
         #print(image_data.shape)
         image_data /= 255.
         image_data = np.expand_dims(image_data, 0)  # Add batch dimension.
-        
+ 
         out_boxes, out_scores, out_classes = self.sess.run(
             [self.boxes, self.scores, self.classes],
             feed_dict={
@@ -94,15 +96,15 @@ class YOLO(object):
                 self.input_image_shape: [image.size[1], image.size[0]],
                 K.learning_phase(): 0
             })
-        return_boxs = []
+        return_boxs = list()
         for i, c in reversed(list(enumerate(out_classes))):
             predicted_class = self.class_names[c]
-            if predicted_class != 'person' :
+            if predicted_class not in self.tracked_classes:
                 continue
             box = out_boxes[i]
            # score = out_scores[i]  
-            x = int(box[1])  
-            y = int(box[0])  
+            x = int(box[1])
+            y = int(box[0])
             w = int(box[3]-box[1])
             h = int(box[2]-box[0])
             if x < 0 :
@@ -111,7 +113,9 @@ class YOLO(object):
             if y < 0 :
                 h = h + y
                 y = 0 
-            return_boxs.append([x,y,w,h])
+            detected_object = {'Box': [x,y,w,h],
+                               'Class': predicted_class}
+            return_boxs.append(detected_object)
 
         return return_boxs
 
